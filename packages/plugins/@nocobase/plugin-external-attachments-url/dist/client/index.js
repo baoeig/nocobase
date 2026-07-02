@@ -54,17 +54,51 @@ function useStorageRules(storage) {
   );
   return !loading && data?.data || null;
 }
-function isFiosAttachmentField(field, collection, dataSourceKey) {
-  const currentDataSource = dataSourceKey || collection?.dataSource || field?.dataSourceKey;
+function getFieldPathParts(field, fieldSchema) {
+  const collectionField = fieldSchema?.["x-collection-field"];
+  const parts = typeof collectionField === "string" ? collectionField.split(".").filter(Boolean) : [];
+  const collectionName = field?.collectionName || (parts.length >= 2 ? parts[parts.length - 2] : void 0);
+  const fieldName = field?.name || fieldSchema?.name || (parts.length >= 2 ? parts[parts.length - 1] : void 0);
+  return {
+    collectionName,
+    fieldName,
+    dataSourceName: parts.length >= 3 && parts[0] === DATA_SOURCE_NAME ? parts[0] : void 0
+  };
+}
+function isFieldInDataSource(app, field, fieldSchema) {
+  const { collectionName, fieldName } = getFieldPathParts(field, fieldSchema);
+  if (!collectionName || !fieldName) {
+    return false;
+  }
+  const dataSource = app?.dataSourceManager?.getDataSource?.(DATA_SOURCE_NAME);
+  const collection = dataSource?.collectionManager?.getCollection?.(collectionName);
+  const dataSourceField = collection?.getField?.(fieldName);
+  return !!dataSourceField && (dataSourceField.target || ATTACHMENT_COLLECTION_NAME) === ATTACHMENT_COLLECTION_NAME;
+}
+function isFiosAttachmentField(options) {
+  const { app, field, collection, dataSourceKey, dataBlockDataSource, fieldSchema } = options;
+  const schemaField = fieldSchema?.["x-component-props"]?.field;
+  const { dataSourceName } = getFieldPathParts(field || schemaField, fieldSchema);
+  const currentDataSource = dataSourceKey || dataBlockDataSource || collection?.dataSource || field?.dataSourceKey || field?.dataSource || schemaField?.dataSourceKey || schemaField?.dataSource || fieldSchema?.["x-data-source"] || fieldSchema?.["x-data-source-key"] || fieldSchema?.["x-component-props"]?.dataSource || dataSourceName;
   const target = field?.target || ATTACHMENT_COLLECTION_NAME;
-  return currentDataSource === DATA_SOURCE_NAME && target === ATTACHMENT_COLLECTION_NAME;
+  return target === ATTACHMENT_COLLECTION_NAME && (currentDataSource === DATA_SOURCE_NAME || isFieldInDataSource(app, field || schemaField, fieldSchema));
 }
 function useFiosAttachmentUrlFieldProps(props) {
+  const app = (0, import_client.useApp)();
   const field = (0, import_client.useCollectionField)();
+  const fieldSchema = (0, import_react.useFieldSchema)();
   const collection = (0, import_client.useCollection_deprecated)();
   const dataSourceKey = (0, import_client.useDataSourceKey)();
+  const dataBlockProps = (0, import_client.useDataBlockProps)();
   const rules = useStorageRules(field?.storage);
-  const headers = isFiosAttachmentField(field, collection, dataSourceKey) ? {
+  const headers = isFiosAttachmentField({
+    app,
+    field,
+    collection,
+    dataSourceKey,
+    dataBlockDataSource: dataBlockProps?.dataSource,
+    fieldSchema
+  }) ? {
     ...props?.headers || {},
     "x-data-source": DATA_SOURCE_NAME
   } : props?.headers;
@@ -150,8 +184,17 @@ var InnerAttachmentUrl = (props) => {
   const collection = (0, import_client.useCollection_deprecated)();
   const { getField } = collection;
   const collectionField = getField(field.props.name);
+  const app = (0, import_client.useApp)();
   const dataSourceKey = (0, import_client.useDataSourceKey)();
-  const isFiosAttachment = isFiosAttachmentField(collectionField, collection, dataSourceKey);
+  const dataBlockProps = (0, import_client.useDataBlockProps)();
+  const isFiosAttachment = isFiosAttachmentField({
+    app,
+    field: collectionField,
+    collection,
+    dataSourceKey,
+    dataBlockDataSource: dataBlockProps?.dataSource,
+    fieldSchema
+  });
   const attachmentDataSource = isFiosAttachment ? DATA_SOURCE_NAME : "main";
   const attachmentHeaders = isFiosAttachment ? {
     ...others?.headers || {},

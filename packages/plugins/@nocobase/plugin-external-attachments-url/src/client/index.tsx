@@ -13,9 +13,11 @@ import {
   TableSelectorParamsProvider,
   Upload,
   useActionContext,
+  useApp,
   useCollectionField,
   useCollection_deprecated,
   useCollectionManager_deprecated,
+  useDataBlockProps,
   useDataSourceKey,
   useDesignable,
   useFieldNames,
@@ -44,18 +46,77 @@ function useStorageRules(storage) {
   return (!loading && data?.data) || null;
 }
 
-function isFiosAttachmentField(field: any, collection: any, dataSourceKey?: string) {
-  const currentDataSource = dataSourceKey || collection?.dataSource || field?.dataSourceKey;
+function getFieldPathParts(field: any, fieldSchema?: any) {
+  const collectionField = fieldSchema?.['x-collection-field'];
+  const parts = typeof collectionField === 'string' ? collectionField.split('.').filter(Boolean) : [];
+  const collectionName = field?.collectionName || (parts.length >= 2 ? parts[parts.length - 2] : undefined);
+  const fieldName = field?.name || fieldSchema?.name || (parts.length >= 2 ? parts[parts.length - 1] : undefined);
+
+  return {
+    collectionName,
+    fieldName,
+    dataSourceName: parts.length >= 3 && parts[0] === DATA_SOURCE_NAME ? parts[0] : undefined,
+  };
+}
+
+function isFieldInDataSource(app: any, field: any, fieldSchema?: any) {
+  const { collectionName, fieldName } = getFieldPathParts(field, fieldSchema);
+  if (!collectionName || !fieldName) {
+    return false;
+  }
+
+  const dataSource = app?.dataSourceManager?.getDataSource?.(DATA_SOURCE_NAME);
+  const collection = dataSource?.collectionManager?.getCollection?.(collectionName);
+  const dataSourceField = collection?.getField?.(fieldName);
+  return !!dataSourceField && (dataSourceField.target || ATTACHMENT_COLLECTION_NAME) === ATTACHMENT_COLLECTION_NAME;
+}
+
+function isFiosAttachmentField(options: {
+  app?: any;
+  field?: any;
+  collection?: any;
+  dataSourceKey?: string;
+  dataBlockDataSource?: string;
+  fieldSchema?: any;
+}) {
+  const { app, field, collection, dataSourceKey, dataBlockDataSource, fieldSchema } = options;
+  const schemaField = fieldSchema?.['x-component-props']?.field;
+  const { dataSourceName } = getFieldPathParts(field || schemaField, fieldSchema);
+  const currentDataSource =
+    dataSourceKey ||
+    dataBlockDataSource ||
+    collection?.dataSource ||
+    field?.dataSourceKey ||
+    field?.dataSource ||
+    schemaField?.dataSourceKey ||
+    schemaField?.dataSource ||
+    fieldSchema?.['x-data-source'] ||
+    fieldSchema?.['x-data-source-key'] ||
+    fieldSchema?.['x-component-props']?.dataSource ||
+    dataSourceName;
   const target = field?.target || ATTACHMENT_COLLECTION_NAME;
-  return currentDataSource === DATA_SOURCE_NAME && target === ATTACHMENT_COLLECTION_NAME;
+  return (
+    target === ATTACHMENT_COLLECTION_NAME &&
+    (currentDataSource === DATA_SOURCE_NAME || isFieldInDataSource(app, field || schemaField, fieldSchema))
+  );
 }
 
 function useFiosAttachmentUrlFieldProps(props) {
+  const app = useApp();
   const field = useCollectionField();
+  const fieldSchema = useFieldSchema();
   const collection = useCollection_deprecated();
   const dataSourceKey = useDataSourceKey();
+  const dataBlockProps = useDataBlockProps();
   const rules = useStorageRules(field?.storage);
-  const headers = isFiosAttachmentField(field, collection, dataSourceKey)
+  const headers = isFiosAttachmentField({
+    app,
+    field,
+    collection,
+    dataSourceKey,
+    dataBlockDataSource: dataBlockProps?.dataSource,
+    fieldSchema,
+  })
     ? {
         ...(props?.headers || {}),
         'x-data-source': DATA_SOURCE_NAME,
@@ -149,8 +210,17 @@ const InnerAttachmentUrl = (props) => {
   const collection = useCollection_deprecated();
   const { getField } = collection;
   const collectionField = getField(field.props.name);
+  const app = useApp();
   const dataSourceKey = useDataSourceKey();
-  const isFiosAttachment = isFiosAttachmentField(collectionField, collection, dataSourceKey);
+  const dataBlockProps = useDataBlockProps();
+  const isFiosAttachment = isFiosAttachmentField({
+    app,
+    field: collectionField,
+    collection,
+    dataSourceKey,
+    dataBlockDataSource: dataBlockProps?.dataSource,
+    fieldSchema,
+  });
   const attachmentDataSource = isFiosAttachment ? DATA_SOURCE_NAME : 'main';
   const attachmentHeaders = isFiosAttachment
     ? {
