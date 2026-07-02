@@ -143,11 +143,27 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
     });
   }
 
+  private prepareAttachmentCollection(dataSource: any) {
+    const collection = dataSource.collectionManager?.getCollection?.(ATTACHMENT_COLLECTION_NAME);
+    if (!collection) {
+      return;
+    }
+
+    collection.options = {
+      ...collection.options,
+      template: 'file',
+    };
+
+    dataSource.acl?.allow?.(ATTACHMENT_COLLECTION_NAME, ['upload', 'create'], 'loggedIn');
+  }
+
   async load() {
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
         return;
       }
+
+      this.prepareAttachmentCollection(dataSource);
 
       const db = dataSource.collectionManager?.db;
       if (!db) {

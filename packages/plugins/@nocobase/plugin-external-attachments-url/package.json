@@ -1,13 +1,16 @@
 {
   "name": "@nocobase/plugin-fios-attach-url",
-  "version": "1.7.19",
+  "version": "1.7.19-fios.1",
   "main": "./dist/server/index.js",
   "displayName": "External attachments URL",
   "displayName.zh-CN": "外部附件 URL",
   "description": "Applies file-manager URL handling to attachment records from external data sources.",
   "description.zh-CN": "为外部数据源中的附件记录应用文件管理器 URL 处理逻辑。",
   "license": "AGPL-3.0",
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@nocobase/plugin-field-attachment-url": "1.x",
+    "@nocobase/plugin-file-manager": "1.x"
+  },
   "keywords": [
     "External data source",
     "Attachments"
