@@ -2,7 +2,7 @@ import type { Database, Model } from '@nocobase/database';
 import type PluginFileManagerServer from '@nocobase/plugin-file-manager';
 import { Plugin } from '@nocobase/server';
 
-const DATA_SOURCE_NAME = 'fios';
+const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 
 function getValue(record: any, key: string) {

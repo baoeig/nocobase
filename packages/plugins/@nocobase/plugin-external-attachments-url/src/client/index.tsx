@@ -24,7 +24,7 @@ import {
 } from '@nocobase/client';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 
-const DATA_SOURCE_NAME = 'fios';
+const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 
 const defaultToValueItem = (data) => {

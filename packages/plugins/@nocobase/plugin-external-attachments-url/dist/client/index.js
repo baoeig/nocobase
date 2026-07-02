@@ -37,7 +37,7 @@ module.exports = __toCommonJS(client_exports);
 var import_react = require("@formily/react");
 var import_client = require("@nocobase/client");
 var import_react2 = __toESM(require("react"));
-var DATA_SOURCE_NAME = "fios";
+var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var defaultToValueItem = (data) => {
   return data?.thumbnailRule ? `${data?.url}${data?.thumbnailRule}` : data?.url;
