@@ -13,11 +13,13 @@ import {
   TableSelectorParamsProvider,
   Upload,
   useActionContext,
+  useCollectionField,
   useCollection_deprecated,
   useCollectionManager_deprecated,
   useDataSourceKey,
   useDesignable,
   useFieldNames,
+  useRequest,
   useTableSelectorProps as useTsp,
 } from '@nocobase/client';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
@@ -28,6 +30,51 @@ const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const defaultToValueItem = (data) => {
   return data?.thumbnailRule ? `${data?.url}${data?.thumbnailRule}` : data?.url;
 };
+
+function useStorageRules(storage) {
+  const name = storage ?? '';
+  const { loading, data } = useRequest<any>(
+    {
+      url: `storages:getBasicInfo/${name}`,
+    },
+    {
+      refreshDeps: [name],
+    },
+  );
+  return (!loading && data?.data) || null;
+}
+
+function isFiosAttachmentField(field: any, collection: any, dataSourceKey?: string) {
+  const currentDataSource = dataSourceKey || collection?.dataSource || field?.dataSourceKey;
+  const target = field?.target || ATTACHMENT_COLLECTION_NAME;
+  return currentDataSource === DATA_SOURCE_NAME && target === ATTACHMENT_COLLECTION_NAME;
+}
+
+function useFiosAttachmentUrlFieldProps(props) {
+  const field = useCollectionField();
+  const collection = useCollection_deprecated();
+  const dataSourceKey = useDataSourceKey();
+  const rules = useStorageRules(field?.storage);
+  const headers = isFiosAttachmentField(field, collection, dataSourceKey)
+    ? {
+        ...(props?.headers || {}),
+        'x-data-source': DATA_SOURCE_NAME,
+      }
+    : props?.headers;
+
+  return {
+    ...props,
+    headers,
+    rules,
+    action: `${field?.target || ATTACHMENT_COLLECTION_NAME}:create${
+      field?.storage ? `?attachmentField=${field.collectionName}.${field.name}` : ''
+    }`,
+    toValueItem: defaultToValueItem,
+    getThumbnailURL: (file) => {
+      return file?.url;
+    },
+  };
+}
 
 const selectorSchema = {
   type: 'void',
@@ -103,12 +150,14 @@ const InnerAttachmentUrl = (props) => {
   const { getField } = collection;
   const collectionField = getField(field.props.name);
   const dataSourceKey = useDataSourceKey();
-  const currentDataSource = dataSourceKey || collection?.dataSource;
-  const isFiosAttachment =
-    currentDataSource === DATA_SOURCE_NAME &&
-    (collectionField?.target || ATTACHMENT_COLLECTION_NAME) === ATTACHMENT_COLLECTION_NAME;
+  const isFiosAttachment = isFiosAttachmentField(collectionField, collection, dataSourceKey);
   const attachmentDataSource = isFiosAttachment ? DATA_SOURCE_NAME : 'main';
-  const attachmentHeaders = isFiosAttachment ? { 'x-data-source': DATA_SOURCE_NAME } : undefined;
+  const attachmentHeaders = isFiosAttachment
+    ? {
+        ...(others?.headers || {}),
+        'x-data-source': DATA_SOURCE_NAME,
+      }
+    : others?.headers;
   const { modalProps } = useActionContext();
 
   const handleSelect = (ev) => {
@@ -193,7 +242,9 @@ const InnerAttachmentUrl = (props) => {
             ? fieldSchema['x-component-props']?.selectFile !== false
             : false
         }
-        action={`${collectionField?.target || ATTACHMENT_COLLECTION_NAME}:create`}
+        action={others?.action || `${collectionField?.target || ATTACHMENT_COLLECTION_NAME}:create`}
+        rules={others?.rules}
+        getThumbnailURL={others?.getThumbnailURL}
         headers={attachmentHeaders}
         onSelect={handleSelect}
         onChange={onChange}
@@ -254,6 +305,7 @@ export const AttachmentUrl = connect(InnerAttachmentUrl, mapReadPretty(FileManag
 
 export class PluginFiosAttachUrlClient extends Plugin {
   async load() {
+    this.app.addScopes({ useAttachmentUrlFieldProps: useFiosAttachmentUrlFieldProps });
     this.app.addComponents({ AttachmentUrl });
   }
 }
