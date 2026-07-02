@@ -1,6 +1,6 @@
 {
   "name": "@nocobase/plugin-fios-attach-url",
-  "version": "1.7.19-fios-test.4-debug",
+  "version": "1.7.19-fios-test.5-debug",
   "main": "./dist/server/index.js",
   "displayName": "External attachments URL",
   "displayName.zh-CN": "外部附件 URL",

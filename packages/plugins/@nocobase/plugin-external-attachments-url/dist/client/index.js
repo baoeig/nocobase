@@ -1,3 +1,12 @@
+define('@nocobase/plugin-fios-attach-url', ['@formily/react', '@nocobase/client', 'react'], function(__formilyReact, __nocobaseClient, __react) {
+  var module = { exports: {} };
+  var exports = module.exports;
+  function require(id) {
+    if (id === '@formily/react') return __formilyReact;
+    if (id === '@nocobase/client') return __nocobaseClient;
+    if (id === 'react') return __react;
+    throw new Error('[fios-attach-url] Cannot resolve dependency: ' + id);
+  }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -446,3 +455,6 @@ var PluginFiosAttachUrlClient = class extends import_client.Plugin {
   }
 };
 var client_default = PluginFiosAttachUrlClient;
+
+  return module.exports;
+});
