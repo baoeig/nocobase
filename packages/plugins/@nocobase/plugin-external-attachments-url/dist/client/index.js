@@ -40,6 +40,10 @@ var import_react2 = __toESM(require("react"));
 var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var DEBUG_PREFIX = "[fios-attach-url]";
+console.warn(DEBUG_PREFIX, "client module evaluated", {
+  dataSource: DATA_SOURCE_NAME,
+  attachmentCollection: ATTACHMENT_COLLECTION_NAME
+});
 var defaultToValueItem = (data) => {
   return data?.thumbnailRule ? `${data?.url}${data?.thumbnailRule}` : data?.url;
 };
@@ -166,7 +170,7 @@ function useFiosAttachmentUrlFieldProps(props) {
   } : props?.headers;
   const action = `${field?.target || ATTACHMENT_COLLECTION_NAME}:create${field?.storage ? `?attachmentField=${field.collectionName}.${field.name}` : ""}`;
   (0, import_react2.useEffect)(() => {
-    console.info(DEBUG_PREFIX, "useAttachmentUrlFieldProps decision", {
+    console.warn(DEBUG_PREFIX, "useAttachmentUrlFieldProps decision", {
       decision,
       action,
       headers,
@@ -288,7 +292,7 @@ var InnerAttachmentUrl = (props) => {
   } : others?.headers;
   const { modalProps } = (0, import_client.useActionContext)();
   (0, import_react2.useEffect)(() => {
-    console.info(DEBUG_PREFIX, "AttachmentUrl component decision", {
+    console.warn(DEBUG_PREFIX, "AttachmentUrl component decision", {
       decision,
       attachmentDataSource,
       attachmentHeaders,
@@ -433,7 +437,7 @@ var FileManageReadPretty = (0, import_react.connect)((props) => {
 var AttachmentUrl = (0, import_react.connect)(InnerAttachmentUrl, (0, import_react.mapReadPretty)(FileManageReadPretty));
 var PluginFiosAttachUrlClient = class extends import_client.Plugin {
   async load() {
-    console.info(DEBUG_PREFIX, "client plugin loaded", {
+    console.warn(DEBUG_PREFIX, "client plugin loaded", {
       dataSource: DATA_SOURCE_NAME,
       attachmentCollection: ATTACHMENT_COLLECTION_NAME
     });

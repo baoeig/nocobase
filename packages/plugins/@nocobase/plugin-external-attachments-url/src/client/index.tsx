@@ -30,6 +30,11 @@ const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const DEBUG_PREFIX = '[fios-attach-url]';
 
+console.warn(DEBUG_PREFIX, 'client module evaluated', {
+  dataSource: DATA_SOURCE_NAME,
+  attachmentCollection: ATTACHMENT_COLLECTION_NAME,
+});
+
 const defaultToValueItem = (data) => {
   return data?.thumbnailRule ? `${data?.url}${data?.thumbnailRule}` : data?.url;
 };
@@ -205,7 +210,7 @@ function useFiosAttachmentUrlFieldProps(props) {
   }`;
 
   useEffect(() => {
-    console.info(DEBUG_PREFIX, 'useAttachmentUrlFieldProps decision', {
+    console.warn(DEBUG_PREFIX, 'useAttachmentUrlFieldProps decision', {
       decision,
       action,
       headers,
@@ -334,7 +339,7 @@ const InnerAttachmentUrl = (props) => {
   const { modalProps } = useActionContext();
 
   useEffect(() => {
-    console.info(DEBUG_PREFIX, 'AttachmentUrl component decision', {
+    console.warn(DEBUG_PREFIX, 'AttachmentUrl component decision', {
       decision,
       attachmentDataSource,
       attachmentHeaders,
@@ -504,7 +509,7 @@ export const AttachmentUrl = connect(InnerAttachmentUrl, mapReadPretty(FileManag
 
 export class PluginFiosAttachUrlClient extends Plugin {
   async load() {
-    console.info(DEBUG_PREFIX, 'client plugin loaded', {
+    console.warn(DEBUG_PREFIX, 'client plugin loaded', {
       dataSource: DATA_SOURCE_NAME,
       attachmentCollection: ATTACHMENT_COLLECTION_NAME,
     });
