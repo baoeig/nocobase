@@ -3,6 +3,7 @@ import {
   ActionContextProvider,
   AssociationField,
   CollectionProvider_deprecated,
+  DataBlockContext,
   EllipsisWithTooltip,
   FormProvider,
   Input,
@@ -17,7 +18,6 @@ import {
   useCollectionField,
   useCollection_deprecated,
   useCollectionManager_deprecated,
-  useDataBlockProps,
   useDataSourceKey,
   useDesignable,
   useFieldNames,
@@ -28,10 +28,16 @@ import React, { useCallback, useContext, useEffect, useState } from 'react';
 
 const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
+const DEBUG_PREFIX = '[fios-attach-url]';
 
 const defaultToValueItem = (data) => {
   return data?.thumbnailRule ? `${data?.url}${data?.thumbnailRule}` : data?.url;
 };
+
+function useOptionalDataBlockProps() {
+  const context = useContext(DataBlockContext as any);
+  return context?.props || {};
+}
 
 function useStorageRules(storage) {
   const name = storage ?? '';
@@ -59,19 +65,55 @@ function getFieldPathParts(field: any, fieldSchema?: any) {
   };
 }
 
-function isFieldInDataSource(app: any, field: any, fieldSchema?: any) {
+function summarizeField(field: any) {
+  if (!field) {
+    return null;
+  }
+
+  return {
+    name: field.name,
+    collectionName: field.collectionName,
+    target: field.target,
+    targetKey: field.targetKey,
+    interface: field.interface,
+    storage: field.storage,
+    dataSource: field.dataSource,
+    dataSourceKey: field.dataSourceKey,
+  };
+}
+
+function getFieldInDataSourceInfo(app: any, field: any, fieldSchema?: any) {
   const { collectionName, fieldName } = getFieldPathParts(field, fieldSchema);
   if (!collectionName || !fieldName) {
-    return false;
+    return {
+      collectionName,
+      fieldName,
+      dataSourceExists: false,
+      collectionExists: false,
+      fieldExists: false,
+      matchesAttachmentTarget: false,
+    };
   }
 
   const dataSource = app?.dataSourceManager?.getDataSource?.(DATA_SOURCE_NAME);
   const collection = dataSource?.collectionManager?.getCollection?.(collectionName);
   const dataSourceField = collection?.getField?.(fieldName);
-  return !!dataSourceField && (dataSourceField.target || ATTACHMENT_COLLECTION_NAME) === ATTACHMENT_COLLECTION_NAME;
+  const matchesAttachmentTarget =
+    !!dataSourceField && (dataSourceField.target || ATTACHMENT_COLLECTION_NAME) === ATTACHMENT_COLLECTION_NAME;
+
+  return {
+    collectionName,
+    fieldName,
+    dataSourceExists: !!dataSource,
+    collectionExists: !!collection,
+    fieldExists: !!dataSourceField,
+    fieldTarget: dataSourceField?.target,
+    field: summarizeField(dataSourceField),
+    matchesAttachmentTarget,
+  };
 }
 
-function isFiosAttachmentField(options: {
+function getFiosAttachmentDecision(options: {
   app?: any;
   field?: any;
   collection?: any;
@@ -81,7 +123,7 @@ function isFiosAttachmentField(options: {
 }) {
   const { app, field, collection, dataSourceKey, dataBlockDataSource, fieldSchema } = options;
   const schemaField = fieldSchema?.['x-component-props']?.field;
-  const { dataSourceName } = getFieldPathParts(field || schemaField, fieldSchema);
+  const fieldPathParts = getFieldPathParts(field || schemaField, fieldSchema);
   const currentDataSource =
     dataSourceKey ||
     dataBlockDataSource ||
@@ -93,12 +135,47 @@ function isFiosAttachmentField(options: {
     fieldSchema?.['x-data-source'] ||
     fieldSchema?.['x-data-source-key'] ||
     fieldSchema?.['x-component-props']?.dataSource ||
-    dataSourceName;
+    fieldPathParts.dataSourceName;
   const target = field?.target || ATTACHMENT_COLLECTION_NAME;
-  return (
+  const dataSourceLookup = getFieldInDataSourceInfo(app, field || schemaField, fieldSchema);
+  const isFiosAttachment =
     target === ATTACHMENT_COLLECTION_NAME &&
-    (currentDataSource === DATA_SOURCE_NAME || isFieldInDataSource(app, field || schemaField, fieldSchema))
-  );
+    (currentDataSource === DATA_SOURCE_NAME || dataSourceLookup.matchesAttachmentTarget);
+
+  return {
+    isFiosAttachment,
+    currentDataSource,
+    target,
+    expectedDataSource: DATA_SOURCE_NAME,
+    fieldPathParts,
+    dataSourceLookup,
+    context: {
+      dataSourceKey,
+      dataBlockDataSource,
+      collectionName: collection?.name,
+      collectionDataSource: collection?.dataSource,
+    },
+    field: summarizeField(field),
+    schemaField: summarizeField(schemaField),
+    fieldSchema: {
+      name: fieldSchema?.name,
+      xCollectionField: fieldSchema?.['x-collection-field'],
+      xDataSource: fieldSchema?.['x-data-source'],
+      xDataSourceKey: fieldSchema?.['x-data-source-key'],
+      componentDataSource: fieldSchema?.['x-component-props']?.dataSource,
+    },
+  };
+}
+
+function isFiosAttachmentField(options: {
+  app?: any;
+  field?: any;
+  collection?: any;
+  dataSourceKey?: string;
+  dataBlockDataSource?: string;
+  fieldSchema?: any;
+}) {
+  return getFiosAttachmentDecision(options).isFiosAttachment;
 }
 
 function useFiosAttachmentUrlFieldProps(props) {
@@ -107,29 +184,55 @@ function useFiosAttachmentUrlFieldProps(props) {
   const fieldSchema = useFieldSchema();
   const collection = useCollection_deprecated();
   const dataSourceKey = useDataSourceKey();
-  const dataBlockProps = useDataBlockProps();
+  const dataBlockProps = useOptionalDataBlockProps();
   const rules = useStorageRules(field?.storage);
-  const headers = isFiosAttachmentField({
+  const decision = getFiosAttachmentDecision({
     app,
     field,
     collection,
     dataSourceKey,
     dataBlockDataSource: dataBlockProps?.dataSource,
     fieldSchema,
-  })
+  });
+  const headers = decision.isFiosAttachment
     ? {
         ...(props?.headers || {}),
         'x-data-source': DATA_SOURCE_NAME,
       }
     : props?.headers;
+  const action = `${field?.target || ATTACHMENT_COLLECTION_NAME}:create${
+    field?.storage ? `?attachmentField=${field.collectionName}.${field.name}` : ''
+  }`;
+
+  useEffect(() => {
+    console.info(DEBUG_PREFIX, 'useAttachmentUrlFieldProps decision', {
+      decision,
+      action,
+      headers,
+      originalHeaders: props?.headers,
+      rules,
+    });
+  }, [
+    action,
+    collection?.dataSource,
+    collection?.name,
+    dataBlockProps?.dataSource,
+    dataSourceKey,
+    decision.isFiosAttachment,
+    field?.collectionName,
+    field?.name,
+    field?.target,
+    fieldSchema?.['x-collection-field'],
+    headers?.['x-data-source'],
+    props?.headers,
+    rules,
+  ]);
 
   return {
     ...props,
     headers,
     rules,
-    action: `${field?.target || ATTACHMENT_COLLECTION_NAME}:create${
-      field?.storage ? `?attachmentField=${field.collectionName}.${field.name}` : ''
-    }`,
+    action,
     toValueItem: defaultToValueItem,
     getThumbnailURL: (file) => {
       return file?.url;
@@ -212,8 +315,8 @@ const InnerAttachmentUrl = (props) => {
   const collectionField = getField(field.props.name);
   const app = useApp();
   const dataSourceKey = useDataSourceKey();
-  const dataBlockProps = useDataBlockProps();
-  const isFiosAttachment = isFiosAttachmentField({
+  const dataBlockProps = useOptionalDataBlockProps();
+  const decision = getFiosAttachmentDecision({
     app,
     field: collectionField,
     collection,
@@ -221,14 +324,40 @@ const InnerAttachmentUrl = (props) => {
     dataBlockDataSource: dataBlockProps?.dataSource,
     fieldSchema,
   });
-  const attachmentDataSource = isFiosAttachment ? DATA_SOURCE_NAME : 'main';
-  const attachmentHeaders = isFiosAttachment
+  const attachmentDataSource = decision.isFiosAttachment ? DATA_SOURCE_NAME : 'main';
+  const attachmentHeaders = decision.isFiosAttachment
     ? {
         ...(others?.headers || {}),
         'x-data-source': DATA_SOURCE_NAME,
       }
     : others?.headers;
   const { modalProps } = useActionContext();
+
+  useEffect(() => {
+    console.info(DEBUG_PREFIX, 'AttachmentUrl component decision', {
+      decision,
+      attachmentDataSource,
+      attachmentHeaders,
+      action: others?.action || `${collectionField?.target || ATTACHMENT_COLLECTION_NAME}:create`,
+      fieldName: field.props.name,
+      originalHeaders: others?.headers,
+    });
+  }, [
+    attachmentDataSource,
+    attachmentHeaders?.['x-data-source'],
+    collection?.dataSource,
+    collection?.name,
+    collectionField?.collectionName,
+    collectionField?.name,
+    collectionField?.target,
+    dataBlockProps?.dataSource,
+    dataSourceKey,
+    decision.isFiosAttachment,
+    field.props.name,
+    fieldSchema?.['x-collection-field'],
+    others?.action,
+    others?.headers,
+  ]);
 
   const handleSelect = (ev) => {
     ev.stopPropagation();
@@ -375,6 +504,10 @@ export const AttachmentUrl = connect(InnerAttachmentUrl, mapReadPretty(FileManag
 
 export class PluginFiosAttachUrlClient extends Plugin {
   async load() {
+    console.info(DEBUG_PREFIX, 'client plugin loaded', {
+      dataSource: DATA_SOURCE_NAME,
+      attachmentCollection: ATTACHMENT_COLLECTION_NAME,
+    });
     this.app.addScopes({ useAttachmentUrlFieldProps: useFiosAttachmentUrlFieldProps });
     this.app.addComponents({ AttachmentUrl });
   }
