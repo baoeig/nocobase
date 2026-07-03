@@ -4,6 +4,7 @@ import { Plugin } from '@nocobase/server';
 
 const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
+const TIMESTAMP_FIELDS = ['createdAt', 'updatedAt'];
 
 function getValue(record: any, key: string) {
   if (!record) {
@@ -39,7 +40,12 @@ function recordValues(record: any) {
 
 function collectionNameOf(record: any) {
   const model = record?.constructor;
-  const collectionName = model?.collection?.name || getValue(record, '__collection');
+  const collectionName =
+    model?.collection?.name ||
+    getValue(record, '__collection') ||
+    model?.tableName ||
+    model?.getTableName?.()?.tableName ||
+    model?.getTableName?.();
   if (collectionName) {
     return collectionName;
   }
@@ -171,15 +177,54 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
 
   private fillAttachmentTimestamps(instance: any) {
     const now = new Date();
-    if (getValue(instance, 'createdAt') == null) {
-      setValue(instance, 'createdAt', now);
-    }
-    if (getValue(instance, 'updatedAt') == null) {
-      setValue(instance, 'updatedAt', now);
+    for (const field of TIMESTAMP_FIELDS) {
+      if (getValue(instance, field) == null) {
+        setValue(instance, field, now);
+      }
     }
   }
 
+  private fillAttachmentTimestampValues(values: any) {
+    if (!values || typeof values !== 'object') {
+      return;
+    }
+
+    const now = new Date();
+    for (const field of TIMESTAMP_FIELDS) {
+      if (values[field] == null) {
+        values[field] = now;
+      }
+    }
+  }
+
+  private registerAttachmentCreateMiddleware() {
+    this.app.dataSourceManager?.use?.(
+      async (ctx, next) => {
+        const { resourceName, actionName } = ctx.action || {};
+        if (
+          ctx.dataSource?.name === DATA_SOURCE_NAME &&
+          resourceName === ATTACHMENT_COLLECTION_NAME &&
+          ['create', 'upload'].includes(actionName)
+        ) {
+          ctx.action.params.values = ctx.action.params.values || {};
+          this.fillAttachmentTimestampValues(ctx.action.params.values);
+          ctx.app?.logger?.warn?.('[fios-attach-url] fill attachment timestamps before create', {
+            dataSource: DATA_SOURCE_NAME,
+            resourceName,
+            actionName,
+            hasCreatedAt: !!ctx.action.params.values.createdAt,
+            hasUpdatedAt: !!ctx.action.params.values.updatedAt,
+          });
+        }
+        await next();
+      },
+      { tag: 'fiosAttachmentTimestamps', after: 'dataTemplate' },
+    );
+  }
+
   async load() {
+    this.registerAttachmentCreateMiddleware();
+
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
         return;
