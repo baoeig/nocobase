@@ -157,6 +157,20 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
     dataSource.acl?.allow?.(ATTACHMENT_COLLECTION_NAME, ['upload', 'create'], 'loggedIn');
   }
 
+  private fillAttachmentTimestamps(instance: any) {
+    if (!this.isAttachmentRecord(instance)) {
+      return;
+    }
+
+    const now = new Date();
+    if (getValue(instance, 'createdAt') == null) {
+      setValue(instance, 'createdAt', now);
+    }
+    if (getValue(instance, 'updatedAt') == null) {
+      setValue(instance, 'updatedAt', now);
+    }
+  }
+
   async load() {
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
@@ -169,6 +183,10 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
       if (!db) {
         return;
       }
+
+      db.on(`${ATTACHMENT_COLLECTION_NAME}.beforeValidate`, (instance) => {
+        this.fillAttachmentTimestamps(instance);
+      });
 
       this.hookDatabase(db, dataSource.name);
     });
