@@ -29,6 +29,7 @@ import React, { useCallback, useContext, useEffect, useState } from 'react';
 const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const DEBUG_PREFIX = '[fios-attach-url]';
+const INTERCEPTOR_FLAG = '__fiosAttachmentUrlInterceptor';
 
 console.warn(DEBUG_PREFIX, 'client module evaluated', {
   dataSource: DATA_SOURCE_NAME,
@@ -181,6 +182,77 @@ function isFiosAttachmentField(options: {
   fieldSchema?: any;
 }) {
   return getFiosAttachmentDecision(options).isFiosAttachment;
+}
+
+function getUrlInfo(url?: string) {
+  if (!url || typeof url !== 'string') {
+    return {};
+  }
+
+  const [action = '', query = ''] = url.split('?');
+  const params = new URLSearchParams(query);
+  return {
+    action,
+    attachmentField: params.get('attachmentField') || undefined,
+  };
+}
+
+function getFieldInDataSourceByPath(app: any, fieldPath?: string) {
+  if (!fieldPath) {
+    return null;
+  }
+
+  const parts = fieldPath.split('.').filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const fieldName = parts.pop();
+  const collectionName = parts.pop();
+  const dataSource = app?.dataSourceManager?.getDataSource?.(DATA_SOURCE_NAME);
+  const collection = dataSource?.collectionManager?.getCollection?.(collectionName);
+  const field = collection?.getField?.(fieldName);
+
+  if (!field || (field.target || ATTACHMENT_COLLECTION_NAME) !== ATTACHMENT_COLLECTION_NAME) {
+    return null;
+  }
+
+  return {
+    collectionName,
+    fieldName,
+    field,
+  };
+}
+
+function registerUploadRequestInterceptor(app: any) {
+  const apiClient = app?.apiClient;
+  if (!apiClient?.axios || apiClient[INTERCEPTOR_FLAG]) {
+    return;
+  }
+
+  apiClient[INTERCEPTOR_FLAG] = true;
+  apiClient.axios.interceptors.request.use((config) => {
+    const { action, attachmentField } = getUrlInfo(config?.url);
+    const fieldInfo = getFieldInDataSourceByPath(app, attachmentField);
+    if (action === `${ATTACHMENT_COLLECTION_NAME}:create` && fieldInfo) {
+      config.headers = config.headers || {};
+      config.headers['x-data-source'] = config.headers['x-data-source'] || DATA_SOURCE_NAME;
+      console.warn(DEBUG_PREFIX, 'request interceptor added x-data-source', {
+        url: config.url,
+        action,
+        attachmentField,
+        dataSource: DATA_SOURCE_NAME,
+        field: summarizeField(fieldInfo.field),
+        headers: config.headers,
+      });
+    }
+    return config;
+  });
+
+  console.warn(DEBUG_PREFIX, 'request interceptor registered', {
+    dataSource: DATA_SOURCE_NAME,
+    attachmentCollection: ATTACHMENT_COLLECTION_NAME,
+  });
 }
 
 function useFiosAttachmentUrlFieldProps(props) {
@@ -513,6 +585,7 @@ export class PluginFiosAttachUrlClient extends Plugin {
       dataSource: DATA_SOURCE_NAME,
       attachmentCollection: ATTACHMENT_COLLECTION_NAME,
     });
+    registerUploadRequestInterceptor(this.app);
     this.app.addScopes({ useAttachmentUrlFieldProps: useFiosAttachmentUrlFieldProps });
     this.app.addComponents({ AttachmentUrl });
   }
