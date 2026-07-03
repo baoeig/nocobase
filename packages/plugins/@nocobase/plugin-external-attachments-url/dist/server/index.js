@@ -141,14 +141,22 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
     }
     collection.options = {
       ...collection.options,
-      template: "file"
+      template: "file",
+      timestamps: true
     };
+    const model = collection.model;
+    if (model) {
+      model.options.timestamps = true;
+      model._timestampAttributes = {
+        ...model._timestampAttributes,
+        createdAt: "createdAt",
+        updatedAt: "updatedAt"
+      };
+      model.refreshAttributes?.();
+    }
     dataSource.acl?.allow?.(ATTACHMENT_COLLECTION_NAME, ["upload", "create"], "loggedIn");
   }
   fillAttachmentTimestamps(instance) {
-    if (!this.isAttachmentRecord(instance)) {
-      return;
-    }
     const now = /* @__PURE__ */ new Date();
     if (getValue(instance, "createdAt") == null) {
       setValue(instance, "createdAt", now);
@@ -167,7 +175,10 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
       if (!db) {
         return;
       }
-      db.on(`${ATTACHMENT_COLLECTION_NAME}.beforeValidate`, (instance) => {
+      db.on("beforeValidate", (instance) => {
+        if (!this.isAttachmentRecord(instance)) {
+          return;
+        }
         this.fillAttachmentTimestamps(instance);
       });
       this.hookDatabase(db, dataSource.name);
