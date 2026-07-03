@@ -27,7 +27,7 @@ var import_server = require("@nocobase/server");
 var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var TIMESTAMP_FIELDS = ["createdAt", "updatedAt"];
-var PLUGIN_VERSION = "1.7.19-fios-test.14-debug";
+var PLUGIN_VERSION = "1.7.19-fios-test.15-debug";
 function requireFileManagerCreateMiddleware() {
   const candidates = [
     "@nocobase/plugin-file-manager/dist/server/actions/attachments",
@@ -70,6 +70,9 @@ function recordValues(record) {
     return void 0;
   }
   return record.dataValues || record;
+}
+function valueKeys(values) {
+  return values && typeof values === "object" ? Object.keys(values) : [];
 }
 function collectionNameOf(record) {
   const model = record?.constructor;
@@ -219,7 +222,36 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           ctx.db = externalDb;
         }
         try {
-          await createMiddleware(ctx, next);
+          const collection = ctx.db?.getCollection?.(ctx.action?.resourceName);
+          ctx.app?.logger?.warn?.("[fios-attach-url] before file-manager createMiddleware", {
+            pluginVersion: PLUGIN_VERSION,
+            dataSource: DATA_SOURCE_NAME,
+            resourceName: ctx.action?.resourceName,
+            actionName: ctx.action?.actionName,
+            attachmentField: ctx.action?.params?.attachmentField,
+            contentType: ctx.request?.headers?.["content-type"],
+            isMultipart: !!ctx.request?.is?.("multipart/*"),
+            collectionTemplate: collection?.options?.template,
+            hasCollection: !!collection,
+            valuesKeys: valueKeys(ctx.action?.params?.values)
+          });
+          await createMiddleware(ctx, async () => {
+            ctx.app?.logger?.warn?.("[fios-attach-url] after file-manager createMiddleware", {
+              pluginVersion: PLUGIN_VERSION,
+              dataSource: DATA_SOURCE_NAME,
+              resourceName: ctx.action?.resourceName,
+              actionName: ctx.action?.actionName,
+              valuesKeys: valueKeys(ctx.action?.params?.values),
+              hasFilename: !!ctx.action?.params?.values?.filename,
+              hasStorageId: !!ctx.action?.params?.values?.storageId,
+              hasPath: ctx.action?.params?.values?.path !== void 0,
+              hasMimetype: !!ctx.action?.params?.values?.mimetype,
+              fileKeys: valueKeys(ctx.file),
+              storageName: ctx.storage?.name,
+              storageId: ctx.storage?.id
+            });
+            await next();
+          });
         } finally {
           ctx.db = previousDb;
         }
@@ -238,8 +270,11 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
             dataSource: DATA_SOURCE_NAME,
             resourceName,
             actionName,
+            valuesKeys: valueKeys(ctx.action.params.values),
             hasCreatedAt: !!ctx.action.params.values.createdAt,
-            hasUpdatedAt: !!ctx.action.params.values.updatedAt
+            hasUpdatedAt: !!ctx.action.params.values.updatedAt,
+            hasFilename: !!ctx.action.params.values.filename,
+            hasStorageId: !!ctx.action.params.values.storageId
           });
         }
         await next();
