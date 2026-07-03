@@ -27,6 +27,20 @@ var import_server = require("@nocobase/server");
 var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var TIMESTAMP_FIELDS = ["createdAt", "updatedAt"];
+function requireFileManagerCreateMiddleware() {
+  const candidates = [
+    "@nocobase/plugin-file-manager/dist/server/actions/attachments",
+    "@nocobase/plugin-file-manager/lib/server/actions/attachments",
+    "@nocobase/plugin-file-manager/src/server/actions/attachments"
+  ];
+  for (const name of candidates) {
+    try {
+      return require(name).createMiddleware;
+    } catch (error) {
+    }
+  }
+  throw new Error("[fios-attach-url] file-manager createMiddleware not found");
+}
 function getValue(record, key) {
   if (!record) {
     return void 0;
@@ -124,6 +138,16 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
       return;
     }
     this.hookedDatabases.add(db);
+    db.on("afterFind", async (instances) => {
+      if (!this.shouldHookDataSource(dataSourceName) || !instances) {
+        return;
+      }
+      const filePlugin = this.pm.get("file-manager");
+      if (!filePlugin) {
+        return;
+      }
+      await this.processRecordTree(db, instances, filePlugin);
+    });
     db.on("afterRepositoryFind", async ({ data }) => {
       if (!this.shouldHookDataSource(dataSourceName)) {
         return;
@@ -176,41 +200,35 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
       }
     }
   }
-  bodyValues(body) {
-    if (!body) {
-      return {};
-    }
-    if (typeof body.toJSON === "function") {
-      return body.toJSON();
-    }
-    return recordValues(body) || {};
+  isFiosAttachmentCreateAction(ctx) {
+    const { resourceName, actionName } = ctx.action || {};
+    return ctx.dataSource?.name === DATA_SOURCE_NAME && resourceName === ATTACHMENT_COLLECTION_NAME && ["create", "upload"].includes(actionName);
   }
-  async normalizeAttachmentCreateResponse(ctx, filePlugin) {
-    const response = {
-      ...ctx.action?.params?.values || {},
-      ...this.bodyValues(ctx.body)
-    };
-    const url = await filePlugin.getFileURL(this.toAttachmentRecord(response));
-    const preview = await filePlugin.getFileURL(this.toAttachmentRecord(response), true);
-    if (url) {
-      response.url = url;
-    }
-    if (preview) {
-      response.preview = preview;
-    }
-    if (ctx.body && typeof ctx.body === "object") {
-      for (const [key, value] of Object.entries(response)) {
-        setValue(ctx.body, key, value);
-      }
-      return;
-    }
-    ctx.body = response;
-  }
-  registerAttachmentCreateMiddleware() {
-    this.app.dataSourceManager?.use?.(
+  registerAttachmentMiddlewares(dataSource) {
+    const createMiddleware = requireFileManagerCreateMiddleware();
+    const externalDb = dataSource.collectionManager?.db;
+    dataSource.resourceManager?.use?.(
       async (ctx, next) => {
+        if (!this.isFiosAttachmentCreateAction(ctx)) {
+          await next();
+          return;
+        }
+        const previousDb = ctx.db;
+        if (externalDb) {
+          ctx.db = externalDb;
+        }
+        try {
+          await createMiddleware(ctx, next);
+        } finally {
+          ctx.db = previousDb;
+        }
+      },
+      { tag: "createMiddleware", after: "auth" }
+    );
+    dataSource.resourceManager?.use?.(
+      async (ctx, next) => {
+        const shouldHandle = this.isFiosAttachmentCreateAction(ctx);
         const { resourceName, actionName } = ctx.action || {};
-        const shouldHandle = ctx.dataSource?.name === DATA_SOURCE_NAME && resourceName === ATTACHMENT_COLLECTION_NAME && ["create", "upload"].includes(actionName);
         if (shouldHandle) {
           ctx.action.params.values = ctx.action.params.values || {};
           this.fillAttachmentTimestampValues(ctx.action.params.values);
@@ -223,44 +241,37 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           });
         }
         await next();
-        if (!shouldHandle || !ctx.body) {
+        if (!shouldHandle || !ctx.body || typeof ctx.body.reload !== "function") {
           return;
         }
         try {
-          if (typeof ctx.body.reload === "function") {
-            ctx.body = await ctx.body.reload();
-          }
-          const filePlugin = this.pm.get("file-manager");
-          if (filePlugin) {
-            await this.normalizeAttachmentCreateResponse(ctx, filePlugin);
-          }
+          ctx.body = await ctx.body.reload();
           ctx.app?.logger?.warn?.("[fios-attach-url] reload attachment response after create", {
             dataSource: DATA_SOURCE_NAME,
-            resourceName,
-            actionName,
+            resourceName: ctx.action?.resourceName,
+            actionName: ctx.action?.actionName,
             hasUrl: !!getValue(ctx.body, "url"),
-            hasPreview: !!getValue(ctx.body, "preview"),
-            keys: Object.keys(this.bodyValues(ctx.body))
+            hasPreview: !!getValue(ctx.body, "preview")
           });
         } catch (error) {
           ctx.app?.logger?.warn?.("[fios-attach-url] failed to reload attachment response after create", {
             dataSource: DATA_SOURCE_NAME,
-            resourceName,
-            actionName,
+            resourceName: ctx.action?.resourceName,
+            actionName: ctx.action?.actionName,
             error: error?.message
           });
         }
       },
-      { tag: "fiosAttachmentTimestamps", after: "dataTemplate" }
+      { tag: "fiosAttachmentTimestamps", after: "createMiddleware" }
     );
   }
   async load() {
-    this.registerAttachmentCreateMiddleware();
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
         return;
       }
       this.prepareAttachmentCollection(dataSource);
+      this.registerAttachmentMiddlewares(dataSource);
       const db = dataSource.collectionManager?.db;
       if (!db) {
         return;
