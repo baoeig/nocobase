@@ -180,7 +180,8 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
     this.app.dataSourceManager?.use?.(
       async (ctx, next) => {
         const { resourceName, actionName } = ctx.action || {};
-        if (ctx.dataSource?.name === DATA_SOURCE_NAME && resourceName === ATTACHMENT_COLLECTION_NAME && ["create", "upload"].includes(actionName)) {
+        const shouldHandle = ctx.dataSource?.name === DATA_SOURCE_NAME && resourceName === ATTACHMENT_COLLECTION_NAME && ["create", "upload"].includes(actionName);
+        if (shouldHandle) {
           ctx.action.params.values = ctx.action.params.values || {};
           this.fillAttachmentTimestampValues(ctx.action.params.values);
           ctx.app?.logger?.warn?.("[fios-attach-url] fill attachment timestamps before create", {
@@ -192,6 +193,32 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           });
         }
         await next();
+        if (!shouldHandle || !ctx.body) {
+          return;
+        }
+        try {
+          if (typeof ctx.body.reload === "function") {
+            ctx.body = await ctx.body.reload();
+          }
+          const filePlugin = this.pm.get("file-manager");
+          if (filePlugin) {
+            await this.processRecordTree(ctx.db, ctx.body, filePlugin);
+          }
+          ctx.app?.logger?.warn?.("[fios-attach-url] reload attachment response after create", {
+            dataSource: DATA_SOURCE_NAME,
+            resourceName,
+            actionName,
+            hasUrl: !!getValue(ctx.body, "url"),
+            hasPreview: !!getValue(ctx.body, "preview")
+          });
+        } catch (error) {
+          ctx.app?.logger?.warn?.("[fios-attach-url] failed to reload attachment response after create", {
+            dataSource: DATA_SOURCE_NAME,
+            resourceName,
+            actionName,
+            error: error?.message
+          });
+        }
       },
       { tag: "fiosAttachmentTimestamps", after: "dataTemplate" }
     );
