@@ -5,7 +5,7 @@ import { Plugin } from '@nocobase/server';
 const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const TIMESTAMP_FIELDS = ['createdAt', 'updatedAt'];
-const PLUGIN_VERSION = '1.7.19-fios-test.15-debug';
+const PLUGIN_VERSION = '1.7.19-fios-test.16-debug';
 
 function requireFileManagerCreateMiddleware() {
   const candidates = [
@@ -59,6 +59,59 @@ function recordValues(record: any) {
 
 function valueKeys(values: any) {
   return values && typeof values === 'object' ? Object.keys(values) : [];
+}
+
+function pickValues(values: any, keys: string[]) {
+  if (!values || typeof values !== 'object') {
+    return {};
+  }
+
+  return keys.reduce((carry, key) => {
+    carry[key] = getValue(values, key);
+    return carry;
+  }, {});
+}
+
+function summarizeValues(values: any) {
+  return {
+    keys: valueKeys(values),
+    sample: pickValues(values, [
+      'id',
+      'title',
+      'filename',
+      'extname',
+      'path',
+      'size',
+      'mimetype',
+      'storageId',
+      'storage_id',
+      'url',
+      'preview',
+      'createdAt',
+      'updatedAt',
+    ]),
+  };
+}
+
+function summarizeModel(model: any) {
+  return {
+    name: model?.name,
+    tableName: model?.tableName,
+    rawAttributes: valueKeys(model?.rawAttributes),
+    timestampAttributes: model?._timestampAttributes,
+    timestamps: model?.options?.timestamps,
+  };
+}
+
+function summarizeCollection(collection: any) {
+  return {
+    name: collection?.name,
+    tableName: collection?.model?.tableName,
+    template: collection?.options?.template,
+    fields: valueKeys(collection?.fields),
+    optionsKeys: valueKeys(collection?.options),
+    model: summarizeModel(collection?.model),
+  };
 }
 
 function collectionNameOf(record: any) {
@@ -262,32 +315,52 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
           ctx.app?.logger?.warn?.('[fios-attach-url] before file-manager createMiddleware', {
             pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
+            ctxDataSource: ctx.dataSource?.name,
+            dbDialect: ctx.db?.sequelize?.getDialect?.(),
             resourceName: ctx.action?.resourceName,
             actionName: ctx.action?.actionName,
+            paramsKeys: valueKeys(ctx.action?.params),
             attachmentField: ctx.action?.params?.attachmentField,
+            query: ctx.query,
             contentType: ctx.request?.headers?.['content-type'],
+            contentLength: ctx.request?.headers?.['content-length'],
             isMultipart: !!ctx.request?.is?.('multipart/*'),
-            collectionTemplate: collection?.options?.template,
-            hasCollection: !!collection,
-            valuesKeys: valueKeys(ctx.action?.params?.values),
+            requestBody: summarizeValues(ctx.request?.body),
+            collection: summarizeCollection(collection),
+            values: summarizeValues(ctx.action?.params?.values),
           });
 
           await createMiddleware(ctx, async () => {
             ctx.app?.logger?.warn?.('[fios-attach-url] after file-manager createMiddleware', {
               pluginVersion: PLUGIN_VERSION,
               dataSource: DATA_SOURCE_NAME,
+              ctxDataSource: ctx.dataSource?.name,
               resourceName: ctx.action?.resourceName,
               actionName: ctx.action?.actionName,
-              valuesKeys: valueKeys(ctx.action?.params?.values),
+              paramsKeys: valueKeys(ctx.action?.params),
+              values: summarizeValues(ctx.action?.params?.values),
               hasFilename: !!ctx.action?.params?.values?.filename,
               hasStorageId: !!ctx.action?.params?.values?.storageId,
               hasPath: ctx.action?.params?.values?.path !== undefined,
               hasMimetype: !!ctx.action?.params?.values?.mimetype,
-              fileKeys: valueKeys(ctx.file),
+              file: summarizeValues(ctx.file),
               storageName: ctx.storage?.name,
               storageId: ctx.storage?.id,
+              storageType: ctx.storage?.type,
+              storageBaseUrl: ctx.storage?.baseUrl,
             });
             await next();
+            ctx.app?.logger?.warn?.('[fios-attach-url] after repository create handler', {
+              pluginVersion: PLUGIN_VERSION,
+              dataSource: DATA_SOURCE_NAME,
+              resourceName: ctx.action?.resourceName,
+              actionName: ctx.action?.actionName,
+              bodyType: ctx.body?.constructor?.name,
+              bodyCollection: collectionNameOf(ctx.body),
+              body: summarizeValues(ctx.body),
+              bodyDataValues: summarizeValues(ctx.body?.dataValues),
+              values: summarizeValues(ctx.action?.params?.values),
+            });
           });
         } finally {
           ctx.db = previousDb;
@@ -309,7 +382,7 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
             dataSource: DATA_SOURCE_NAME,
             resourceName,
             actionName,
-            valuesKeys: valueKeys(ctx.action.params.values),
+            values: summarizeValues(ctx.action.params.values),
             hasCreatedAt: !!ctx.action.params.values.createdAt,
             hasUpdatedAt: !!ctx.action.params.values.updatedAt,
             hasFilename: !!ctx.action.params.values.filename,
@@ -332,6 +405,8 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
             actionName: ctx.action?.actionName,
             hasUrl: !!getValue(ctx.body, 'url'),
             hasPreview: !!getValue(ctx.body, 'preview'),
+            body: summarizeValues(ctx.body),
+            bodyDataValues: summarizeValues(ctx.body?.dataValues),
           });
         } catch (error) {
           ctx.app?.logger?.warn?.('[fios-attach-url] failed to reload attachment response after create', {

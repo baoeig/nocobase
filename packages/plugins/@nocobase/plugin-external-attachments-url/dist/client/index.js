@@ -50,7 +50,7 @@ var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var DEBUG_PREFIX = "[fios-attach-url]";
 var INTERCEPTOR_FLAG = "__fiosAttachmentUrlInterceptor";
-var PLUGIN_VERSION = "1.7.19-fios-test.15-debug";
+var PLUGIN_VERSION = "1.7.19-fios-test.16-debug";
 console.warn(DEBUG_PREFIX, "client module evaluated", {
   pluginVersion: PLUGIN_VERSION,
   dataSource: DATA_SOURCE_NAME,
