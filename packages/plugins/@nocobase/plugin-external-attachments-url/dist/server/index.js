@@ -176,6 +176,36 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
       }
     }
   }
+  bodyValues(body) {
+    if (!body) {
+      return {};
+    }
+    if (typeof body.toJSON === "function") {
+      return body.toJSON();
+    }
+    return recordValues(body) || {};
+  }
+  async normalizeAttachmentCreateResponse(ctx, filePlugin) {
+    const response = {
+      ...ctx.action?.params?.values || {},
+      ...this.bodyValues(ctx.body)
+    };
+    const url = await filePlugin.getFileURL(this.toAttachmentRecord(response));
+    const preview = await filePlugin.getFileURL(this.toAttachmentRecord(response), true);
+    if (url) {
+      response.url = url;
+    }
+    if (preview) {
+      response.preview = preview;
+    }
+    if (ctx.body && typeof ctx.body === "object") {
+      for (const [key, value] of Object.entries(response)) {
+        setValue(ctx.body, key, value);
+      }
+      return;
+    }
+    ctx.body = response;
+  }
   registerAttachmentCreateMiddleware() {
     this.app.dataSourceManager?.use?.(
       async (ctx, next) => {
@@ -202,14 +232,15 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           }
           const filePlugin = this.pm.get("file-manager");
           if (filePlugin) {
-            await this.processRecordTree(ctx.db, ctx.body, filePlugin);
+            await this.normalizeAttachmentCreateResponse(ctx, filePlugin);
           }
           ctx.app?.logger?.warn?.("[fios-attach-url] reload attachment response after create", {
             dataSource: DATA_SOURCE_NAME,
             resourceName,
             actionName,
             hasUrl: !!getValue(ctx.body, "url"),
-            hasPreview: !!getValue(ctx.body, "preview")
+            hasPreview: !!getValue(ctx.body, "preview"),
+            keys: Object.keys(this.bodyValues(ctx.body))
           });
         } catch (error) {
           ctx.app?.logger?.warn?.("[fios-attach-url] failed to reload attachment response after create", {
