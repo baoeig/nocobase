@@ -27,6 +27,7 @@ var import_server = require("@nocobase/server");
 var DATA_SOURCE_NAME = "fios-test";
 var ATTACHMENT_COLLECTION_NAME = "attachments";
 var TIMESTAMP_FIELDS = ["createdAt", "updatedAt"];
+var PLUGIN_VERSION = "1.7.19-fios-test.14-debug";
 function requireFileManagerCreateMiddleware() {
   const candidates = [
     "@nocobase/plugin-file-manager/dist/server/actions/attachments",
@@ -233,6 +234,7 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           ctx.action.params.values = ctx.action.params.values || {};
           this.fillAttachmentTimestampValues(ctx.action.params.values);
           ctx.app?.logger?.warn?.("[fios-attach-url] fill attachment timestamps before create", {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName,
             actionName,
@@ -247,6 +249,7 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
         try {
           ctx.body = await ctx.body.reload();
           ctx.app?.logger?.warn?.("[fios-attach-url] reload attachment response after create", {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName: ctx.action?.resourceName,
             actionName: ctx.action?.actionName,
@@ -255,6 +258,7 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
           });
         } catch (error) {
           ctx.app?.logger?.warn?.("[fios-attach-url] failed to reload attachment response after create", {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName: ctx.action?.resourceName,
             actionName: ctx.action?.actionName,
@@ -266,12 +270,22 @@ var PluginExternalAttachmentsUrlServer = class extends import_server.Plugin {
     );
   }
   async load() {
+    this.app.logger?.warn?.("[fios-attach-url] server plugin loaded", {
+      pluginVersion: PLUGIN_VERSION,
+      dataSource: DATA_SOURCE_NAME,
+      attachmentCollection: ATTACHMENT_COLLECTION_NAME
+    });
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
         return;
       }
       this.prepareAttachmentCollection(dataSource);
       this.registerAttachmentMiddlewares(dataSource);
+      this.app.logger?.warn?.("[fios-attach-url] server middlewares registered", {
+        pluginVersion: PLUGIN_VERSION,
+        dataSource: DATA_SOURCE_NAME,
+        attachmentCollection: ATTACHMENT_COLLECTION_NAME
+      });
       const db = dataSource.collectionManager?.db;
       if (!db) {
         return;

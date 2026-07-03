@@ -30,8 +30,10 @@ const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const DEBUG_PREFIX = '[fios-attach-url]';
 const INTERCEPTOR_FLAG = '__fiosAttachmentUrlInterceptor';
+const PLUGIN_VERSION = '1.7.19-fios-test.14-debug';
 
 console.warn(DEBUG_PREFIX, 'client module evaluated', {
+  pluginVersion: PLUGIN_VERSION,
   dataSource: DATA_SOURCE_NAME,
   attachmentCollection: ATTACHMENT_COLLECTION_NAME,
 });
@@ -238,6 +240,7 @@ function registerUploadRequestInterceptor(app: any) {
       config.headers = config.headers || {};
       config.headers['x-data-source'] = config.headers['x-data-source'] || DATA_SOURCE_NAME;
       console.warn(DEBUG_PREFIX, 'request interceptor added x-data-source', {
+        pluginVersion: PLUGIN_VERSION,
         url: config.url,
         action,
         attachmentField,
@@ -250,6 +253,7 @@ function registerUploadRequestInterceptor(app: any) {
   });
 
   console.warn(DEBUG_PREFIX, 'request interceptor registered', {
+    pluginVersion: PLUGIN_VERSION,
     dataSource: DATA_SOURCE_NAME,
     attachmentCollection: ATTACHMENT_COLLECTION_NAME,
   });
@@ -582,6 +586,7 @@ export const AttachmentUrl = connect(InnerAttachmentUrl, mapReadPretty(FileManag
 export class PluginFiosAttachUrlClient extends Plugin {
   async load() {
     console.warn(DEBUG_PREFIX, 'client plugin loaded', {
+      pluginVersion: PLUGIN_VERSION,
       dataSource: DATA_SOURCE_NAME,
       attachmentCollection: ATTACHMENT_COLLECTION_NAME,
     });

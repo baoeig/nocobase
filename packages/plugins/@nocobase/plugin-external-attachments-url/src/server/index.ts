@@ -5,6 +5,7 @@ import { Plugin } from '@nocobase/server';
 const DATA_SOURCE_NAME = 'fios-test';
 const ATTACHMENT_COLLECTION_NAME = 'attachments';
 const TIMESTAMP_FIELDS = ['createdAt', 'updatedAt'];
+const PLUGIN_VERSION = '1.7.19-fios-test.14-debug';
 
 function requireFileManagerCreateMiddleware() {
   const candidates = [
@@ -270,6 +271,7 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
           ctx.action.params.values = ctx.action.params.values || {};
           this.fillAttachmentTimestampValues(ctx.action.params.values);
           ctx.app?.logger?.warn?.('[fios-attach-url] fill attachment timestamps before create', {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName,
             actionName,
@@ -287,6 +289,7 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
           ctx.body = await ctx.body.reload();
 
           ctx.app?.logger?.warn?.('[fios-attach-url] reload attachment response after create', {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName: ctx.action?.resourceName,
             actionName: ctx.action?.actionName,
@@ -295,6 +298,7 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
           });
         } catch (error) {
           ctx.app?.logger?.warn?.('[fios-attach-url] failed to reload attachment response after create', {
+            pluginVersion: PLUGIN_VERSION,
             dataSource: DATA_SOURCE_NAME,
             resourceName: ctx.action?.resourceName,
             actionName: ctx.action?.actionName,
@@ -307,6 +311,12 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
   }
 
   async load() {
+    this.app.logger?.warn?.('[fios-attach-url] server plugin loaded', {
+      pluginVersion: PLUGIN_VERSION,
+      dataSource: DATA_SOURCE_NAME,
+      attachmentCollection: ATTACHMENT_COLLECTION_NAME,
+    });
+
     this.app.dataSourceManager.afterAddDataSource((dataSource) => {
       if (!this.shouldHookDataSource(dataSource.name)) {
         return;
@@ -314,6 +324,11 @@ export class PluginExternalAttachmentsUrlServer extends Plugin {
 
       this.prepareAttachmentCollection(dataSource);
       this.registerAttachmentMiddlewares(dataSource);
+      this.app.logger?.warn?.('[fios-attach-url] server middlewares registered', {
+        pluginVersion: PLUGIN_VERSION,
+        dataSource: DATA_SOURCE_NAME,
+        attachmentCollection: ATTACHMENT_COLLECTION_NAME,
+      });
 
       const db = dataSource.collectionManager?.db;
       if (!db) {
